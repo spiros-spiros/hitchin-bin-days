@@ -1,0 +1,78 @@
+blueprint:
+  name: Bin day notification, one per bin (North Herts)
+  description: >-
+    Send a separate notification for each bin due tomorrow, at a time you
+    choose the evening before.
+
+    If two bins go out on the same day you get two messages, each naming its
+    own bin and container. Notifications can go to several services at once.
+  domain: automation
+  source_url: https://github.com/spiros-spiros/hitchin-bin-days/blob/main/blueprints/automation/north_herts_bins/bin_day_per_bin_notification.yaml
+  input:
+    bin_day_tomorrow:
+      name: "Bin day tomorrow sensor"
+      description: >-
+        The "Bin day tomorrow" binary sensor from the North Herts Bins
+        integration.
+      selector:
+        entity:
+          filter:
+            - integration: north_herts_bins
+              domain: binary_sensor
+    notify_services:
+      name: Notification services
+      description: >-
+        One or more notify services, each without the "notify." prefix - for
+        example mobile_app_my_phone, or persistent_notification.
+      selector:
+        text:
+          multiple: true
+    alert_time:
+      name: Alert time
+      description: When to send the reminder, the evening before collection.
+      default: "17:00:00"
+      selector:
+        time:
+    title:
+      name: Notification title
+      default: "Bin day"
+      selector:
+        text:
+
+mode: single
+
+variables:
+  source: !input bin_day_tomorrow
+  notify_services: !input notify_services
+  bins: "{{ state_attr(source, 'bins') | default([], true) }}"
+  containers: "{{ state_attr(source, 'containers') | default([], true) }}"
+
+triggers:
+  - trigger: time
+    at: !input alert_time
+
+conditions:
+  # Nothing due tomorrow means nothing to say.
+  - condition: template
+    value_template: "{{ bins | count > 0 }}"
+
+actions:
+  - repeat:
+      for_each: "{{ bins }}"
+      sequence:
+        # Captured before the inner repeat, which rebinds `repeat`.
+        - variables:
+            bin_name: "{{ repeat.item }}"
+            # repeat.index is 1-based; guard in case a bin has no container.
+            bin_container: >-
+              {{ containers[repeat.index - 1]
+                 if containers | count >= repeat.index else '' }}
+        - repeat:
+            for_each: "{{ notify_services }}"
+            sequence:
+              - action: "notify.{{ repeat.item }}"
+                data:
+                  title: !input title
+                  message: >-
+                    {{ bin_name }}{% if bin_container %} ({{ bin_container }}){% endif %}
+                    goes out tomorrow
