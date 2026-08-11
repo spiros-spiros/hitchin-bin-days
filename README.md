@@ -134,9 +134,14 @@ dates.
 ## Icon
 
 The integration ships its own brand icon (a purple lid bin) in
-`custom_components/north_herts_bins/brand/`. Home Assistant serves these
-directly from **2026.3 onwards**; on older versions the integration falls back
-to the generic placeholder.
+`custom_components/north_herts_bins/brand/`, with a lighter `dark_icon`
+variant so the body doesn't disappear against dark themes. Home Assistant
+serves these directly from **2026.3 onwards**; on older versions the
+integration falls back to the generic placeholder.
+
+The artwork is original, drawn for this project — editable sources are in
+`assets/`. It borrows only the council's colours (`#682888` lid, `#303030`
+body), not their images, so it can be redistributed freely.
 
 The HACS panel still shows "icon not available" regardless, because the HACS
 frontend does not yet read locally bundled brand images
