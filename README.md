@@ -131,6 +131,18 @@ the council's site could break it. The integration fails loudly (entities go
 unavailable, with a clear error in the log) rather than silently reporting stale
 dates.
 
+## Icon
+
+The integration ships its own brand icon (a purple lid bin) in
+`custom_components/north_herts_bins/brand/`. Home Assistant serves these
+directly from **2026.3 onwards**; on older versions the integration falls back
+to the generic placeholder.
+
+The HACS panel still shows "icon not available" regardless, because the HACS
+frontend does not yet read locally bundled brand images
+([hacs/integration#5171](https://github.com/hacs/integration/issues/5171)). The
+icon shows correctly on the Settings → Devices & Services page.
+
 ## Development
 
 ```bash
