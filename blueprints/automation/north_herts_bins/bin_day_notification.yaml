@@ -1,0 +1,100 @@
+blueprint:
+  name: Bin day notification (North Herts)
+  description: >-
+    Send a notification when your bins are due.
+
+    Choose whether to be told on the morning of collection, the evening before,
+    or both. The message lists exactly which bins are going out.
+  domain: automation
+  source_url: https://github.com/spiros-spiros/hitchin-bin-days/blob/main/blueprints/automation/north_herts_bins/bin_day_notification.yaml
+  input:
+    bin_day_today:
+      name: "Bin day today sensor"
+      description: The "Bin day today" binary sensor from the North Herts Bins integration.
+      selector:
+        entity:
+          filter:
+            - integration: north_herts_bins
+              domain: binary_sensor
+    bin_day_tomorrow:
+      name: "Bin day tomorrow sensor"
+      description: The "Bin day tomorrow" binary sensor from the same device.
+      selector:
+        entity:
+          filter:
+            - integration: north_herts_bins
+              domain: binary_sensor
+    notify_service:
+      name: Notification service
+      description: >-
+        The notify service to call, without the "notify." prefix - for example
+        mobile_app_my_phone, or persistent_notification.
+      default: persistent_notification
+      selector:
+        text:
+    morning_time:
+      name: Morning reminder time
+      description: When to notify on the day of collection.
+      default: "07:00:00"
+      selector:
+        time:
+    evening_time:
+      name: Evening reminder time
+      description: When to notify the evening before collection.
+      default: "19:30:00"
+      selector:
+        time:
+    send_morning:
+      name: Notify on the morning of collection
+      default: true
+      selector:
+        boolean:
+    send_evening:
+      name: Notify the evening before
+      default: true
+      selector:
+        boolean:
+    title:
+      name: Notification title
+      default: "Bin day"
+      selector:
+        text:
+
+mode: single
+
+triggers:
+  - trigger: time
+    at: !input morning_time
+    id: morning
+  - trigger: time
+    at: !input evening_time
+    id: evening
+
+variables:
+  today_entity: !input bin_day_today
+  tomorrow_entity: !input bin_day_tomorrow
+  notify_service: !input notify_service
+  send_morning: !input send_morning
+  send_evening: !input send_evening
+  is_morning: "{{ trigger.id == 'morning' }}"
+  # Pick the sensor for whichever reminder fired.
+  source: "{{ today_entity if is_morning else tomorrow_entity }}"
+  bins: "{{ state_attr(source, 'message') }}"
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (is_morning and send_morning) or ((not is_morning) and send_evening) }}
+  - condition: template
+    value_template: "{{ is_state(source, 'on') }}"
+
+actions:
+  - action: "notify.{{ notify_service }}"
+    data:
+      title: !input title
+      message: >-
+        {% if is_morning %}
+          Bins go out today: {{ bins }}.
+        {% else %}
+          Bins go out tomorrow: {{ bins }}.
+        {% endif %}

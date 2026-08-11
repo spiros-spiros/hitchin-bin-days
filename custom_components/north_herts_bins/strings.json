@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "North Herts Bins",
+        "description": "Look up your address at https://www.north-herts.gov.uk/find-your-bin-collection-day, then copy the address bar of the results page and paste it below.",
+        "data": {
+          "url": "Results page URL"
+        },
+        "data_description": {
+          "url": "The link that shows your bin days, containing webpage_token, auth and id."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect North Herts Bins",
+        "description": "The saved link for {address} no longer works. Look up your address again and paste the new results page URL.",
+        "data": {
+          "url": "Results page URL"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "That does not look like a North Herts bin collection results URL. It should start with https://waste.nc.north-herts.gov.uk/w/webpage/find-bin-collection-day-show-details",
+      "cannot_connect": "Could not reach the council website. Please try again.",
+      "no_data": "The page loaded but no bin collections were found. Check the link is the results page for your address."
+    },
+    "abort": {
+      "already_configured": "This address is already set up.",
+      "reauth_successful": "Reconnected successfully."
+    }
+  }
+}
