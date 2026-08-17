@@ -131,6 +131,46 @@ the council's site could break it. The integration fails loudly (entities go
 unavailable, with a clear error in the log) rather than silently reporting stale
 dates.
 
+## When the council's page goes stale
+
+The council's own page keeps serving a collection date for days after it has
+passed. On 17 August 2026, for example, it still gave 12 August as the "next
+collection" for Cardboard & Paper and Food Waste.
+
+Taken at face value that produces a negative "days until", and — much worse —
+a date that never matches today or tomorrow, so the reminder for the *real*
+collection never fires. Food waste is collected weekly, so a caddy would be
+missed while the integration pointed at a date five days gone.
+
+So a date that has passed is rolled forward by the interval in the council's
+own `Collection cycle` text:
+
+| Cycle text | Interval |
+| --- | --- |
+| `Every Wednesday` | 7 days |
+| `Every Friday fortnightly` | 14 days |
+| `Every 3rd Wednesday` | 21 days |
+
+`Every 3rd Wednesday` means every three weeks, not the third Wednesday of the
+month — all three wheeled bins carry that phrase while falling on 12, 19 and
+26 August, one week apart on a shared rota.
+
+Dates the council reports correctly are never touched. Where a date has been
+rolled forward, the sensor says so:
+
+- `projected: true`
+- `council_reported: "2026-08-12"` — what the page actually said
+
+A warning naming the affected bins is logged on each refresh. Projection is
+applied when entities are read rather than when data is fetched, so it stays
+correct as the date rolls over between polls.
+
+Two limits worth knowing. If the cycle text can't be parsed, the date is left
+exactly as published rather than guessed at — better a visibly stale date than
+a confidently wrong one. And a projected date can't know about bank holiday
+changes; the council's page reflects those, so a projection is only a
+stand-in until their page catches up.
+
 ## Icon
 
 The integration ships its own brand icon (a purple lid bin) in

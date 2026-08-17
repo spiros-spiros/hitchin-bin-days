@@ -39,8 +39,6 @@ class BinCalendar(NorthHertsBinsEntity, CalendarEntity):
 
     def _events(self) -> list[CalendarEvent]:
         """Build all-day events from the known collections."""
-        if not self.coordinator.data:
-            return []
         events = [
             CalendarEvent(
                 summary=(
@@ -50,7 +48,7 @@ class BinCalendar(NorthHertsBinsEntity, CalendarEntity):
                 end=c.next_collection + timedelta(days=1),
                 description=c.cycle or "",
             )
-            for c in self.coordinator.data.collections
+            for c in self._collections()
         ]
         return sorted(events, key=lambda event: event.start)
 

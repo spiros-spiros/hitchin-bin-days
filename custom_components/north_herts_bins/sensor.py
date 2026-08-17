@@ -81,6 +81,14 @@ class BinDateSensor(NorthHertsBinsEntity, SensorEntity):
             "days_until": days,
             "is_today": days == 0,
             "is_tomorrow": days == 1,
+            # True when the council is still serving a date that has passed and
+            # this one was worked out from the cycle instead.
+            "projected": collection.projected,
+            "council_reported": (
+                collection.reported_collection.isoformat()
+                if collection.reported_collection
+                else None
+            ),
         }
 
 
@@ -130,9 +138,10 @@ class NextCollectionSensor(NorthHertsBinsEntity, SensorEntity):
     @property
     def native_value(self) -> date | None:
         """Return the soonest collection date."""
-        if not self.coordinator.data or not self.coordinator.data.collections:
+        collections = self._collections()
+        if not collections:
             return None
-        return min(c.next_collection for c in self.coordinator.data.collections)
+        return min(c.next_collection for c in collections)
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
@@ -140,7 +149,7 @@ class NextCollectionSensor(NorthHertsBinsEntity, SensorEntity):
         value = self.native_value
         if value is None:
             return {}
-        due = [c for c in self.coordinator.data.collections if c.next_collection == value]
+        due = [c for c in self._collections() if c.next_collection == value]
         return {
             "bins": [c.name for c in due],
             "containers": [c.container for c in due if c.container],
@@ -162,12 +171,9 @@ class NextCollectionBinsSensor(NorthHertsBinsEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         """Return a comma separated list of the bins due next."""
-        if not self.coordinator.data or not self.coordinator.data.collections:
+        collections = self._collections()
+        if not collections:
             return None
-        soonest = min(c.next_collection for c in self.coordinator.data.collections)
-        names = [
-            c.name
-            for c in self.coordinator.data.collections
-            if c.next_collection == soonest
-        ]
+        soonest = min(c.next_collection for c in collections)
+        names = [c.name for c in collections if c.next_collection == soonest]
         return ", ".join(names)

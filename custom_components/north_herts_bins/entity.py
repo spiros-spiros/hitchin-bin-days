@@ -7,7 +7,9 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import BinCollection
+from homeassistant.util import dt as dt_util
+
+from .api import BinCollection, project_collections
 from .const import CONF_ADDRESS, DOMAIN
 from .coordinator import NorthHertsBinsCoordinator
 
@@ -50,10 +52,18 @@ class NorthHertsBinsEntity(CoordinatorEntity[NorthHertsBinsCoordinator]):
         """Rewrite state when the date changes."""
         self.async_write_ha_state()
 
+    def _collections(self) -> list[BinCollection]:
+        """Return the collections, with passed dates rolled forward.
+
+        Projection happens here rather than at fetch time so it stays correct
+        as the date changes between polls.
+        """
+        if self.coordinator.data is None:
+            return []
+        return project_collections(
+            self.coordinator.data.collections, dt_util.now().date()
+        )
+
     def _collection(self, slug: str) -> BinCollection | None:
         """Return the current data for one bin type, if still present."""
-        if self.coordinator.data is None:
-            return None
-        return next(
-            (c for c in self.coordinator.data.collections if c.slug == slug), None
-        )
+        return next((c for c in self._collections() if c.slug == slug), None)

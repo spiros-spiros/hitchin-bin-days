@@ -92,12 +92,8 @@ class _AnyBinSensor(NorthHertsBinsEntity, BinarySensorEntity):
 
     def _due(self) -> list[BinCollection]:
         """Return the bins due on the target day."""
-        if not self.coordinator.data:
-            return []
         target = _today() + timedelta(days=self._offset)
-        return [
-            c for c in self.coordinator.data.collections if c.next_collection == target
-        ]
+        return [c for c in self._collections() if c.next_collection == target]
 
     @property
     def is_on(self) -> bool:

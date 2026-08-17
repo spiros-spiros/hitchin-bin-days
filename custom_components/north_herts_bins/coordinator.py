@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import (
     BinData,
@@ -16,6 +17,7 @@ from .api import (
     InvalidUrlError,
     NoDataError,
     async_fetch,
+    stale_collections,
 )
 from .const import CONF_URL, DEFAULT_SCAN_INTERVAL, DOMAIN
 
@@ -46,9 +48,21 @@ class NorthHertsBinsCoordinator(DataUpdateCoordinator[BinData]):
         """Fetch the latest collection data."""
         session = async_get_clientsession(self.hass)
         try:
-            return await async_fetch(session, self._url)
+            data = await async_fetch(session, self._url)
         except InvalidUrlError as err:
             # The saved link is no longer usable - ask the user to re-add it.
             raise ConfigEntryAuthFailed(str(err)) from err
         except (CannotConnectError, NoDataError) as err:
             raise UpdateFailed(str(err)) from err
+
+        if stale := stale_collections(data, dt_util.now().date()):
+            _LOGGER.warning(
+                "North Herts Council is still reporting past collection dates for "
+                "%s. Dates will be rolled forward using the stated collection "
+                "cycle until the council's page catches up",
+                ", ".join(
+                    f"{c.name} ({c.next_collection.isoformat()})" for c in stale
+                ),
+            )
+
+        return data

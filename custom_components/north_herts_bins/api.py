@@ -11,8 +11,9 @@ from __future__ import annotations
 import html
 import logging
 import re
-from dataclasses import dataclass
-from datetime import date, datetime
+from collections.abc import Iterable
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -60,11 +61,24 @@ class BinCollection:
     container: str | None
     next_collection: date
     cycle: str | None
+    # What the council actually printed, kept when next_collection had to be
+    # rolled forward. None means next_collection is exactly what they said.
+    reported_collection: date | None = None
 
     @property
     def slug(self) -> str:
         """A stable key for entity ids."""
         return re.sub(r"[^a-z0-9]+", "_", self.name.lower()).strip("_")
+
+    @property
+    def projected(self) -> bool:
+        """True when this date was rolled forward rather than read verbatim."""
+        return self.reported_collection is not None
+
+    @property
+    def cycle_days(self) -> int | None:
+        """How often this bin is collected, in days, from the cycle text."""
+        return cycle_to_days(self.cycle)
 
 
 @dataclass(frozen=True)
@@ -73,6 +87,100 @@ class BinData:
 
     address: str | None
     collections: list[BinCollection]
+
+
+_ORDINALS = {
+    "2nd": 2, "second": 2, "other": 2,
+    "3rd": 3, "third": 3,
+    "4th": 4, "fourth": 4,
+    "5th": 5, "fifth": 5,
+}
+
+
+def cycle_to_days(cycle: str | None) -> int | None:
+    """Turn a collection cycle description into an interval in days.
+
+    The council writes these as free text, e.g. "Every Wednesday" (7),
+    "Every 3rd Wednesday" (21), "Every Friday fortnightly" (14). Returns None
+    when the text cannot be understood, in which case callers must not guess.
+    """
+    if not cycle:
+        return None
+    text = cycle.lower()
+
+    # "Every 14 days" style, if it ever appears.
+    if match := re.search(r"\bevery\s+(\d+)\s+days?\b", text):
+        days = int(match.group(1))
+        return days if days > 0 else None
+
+    # "fortnightly" wins over any weekday, as in "Every Friday fortnightly".
+    if "fortnight" in text or "biweekly" in text:
+        return 14
+
+    weeks: int | None = None
+    if match := re.search(r"\bevery\s+(\d+)(?:st|nd|rd|th)\b", text):
+        weeks = int(match.group(1))
+    else:
+        for word, value in _ORDINALS.items():
+            if re.search(rf"\bevery\s+{word}\b", text):
+                weeks = value
+                break
+
+    names_a_weekday = bool(
+        re.search(
+            r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", text
+        )
+    )
+
+    if weeks is not None:
+        # "Every 3rd Wednesday" means every three weeks, not the third
+        # Wednesday of the month: the three wheeled bins share one Wednesday
+        # rota, each offset by a week.
+        return weeks * 7 if names_a_weekday or "week" in text else None
+
+    if names_a_weekday or "weekly" in text or re.search(r"\bevery\s+week\b", text):
+        return 7
+
+    return None
+
+
+def project_collection(collection: BinCollection, today: date) -> BinCollection:
+    """Roll a past collection date forward to the next one that is due.
+
+    The council's page keeps serving a date for days after it has passed, which
+    would otherwise report a negative "days until" and, worse, never match
+    today or tomorrow - so the reminder for the real collection never fires.
+    """
+    if collection.next_collection >= today:
+        return collection
+
+    interval = collection.cycle_days
+    if not interval:
+        # Nothing reliable to extrapolate from; leave it alone rather than
+        # inventing a date.
+        return collection
+
+    reported = collection.reported_collection or collection.next_collection
+    gap = (today - collection.next_collection).days
+    steps = -(-gap // interval)  # ceiling division
+    return replace(
+        collection,
+        next_collection=collection.next_collection + timedelta(days=steps * interval),
+        reported_collection=reported,
+    )
+
+
+def project_collections(
+    collections: Iterable[BinCollection], today: date
+) -> list[BinCollection]:
+    """Project every collection forward, keeping the soonest-first order."""
+    projected = [project_collection(c, today) for c in collections]
+    return sorted(projected, key=lambda c: (c.next_collection, c.name))
+
+
+def stale_collections(data: BinData, today: date) -> list[BinCollection]:
+    """Collections whose council-reported date has already passed."""
+    return [c for c in data.collections if c.next_collection < today]
 
 
 def validate_url(url: str) -> str:
