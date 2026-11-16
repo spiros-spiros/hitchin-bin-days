@@ -97,6 +97,13 @@ It asks for the two bin-day sensors, your notify service (e.g.
 `mobile_app_your_phone`), and the times to notify. You can enable a morning
 reminder on the day, an evening reminder the night before, or both.
 
+A second blueprint, `bin_day_per_bin_notification.yaml`, sends one message per
+bin the evening before (to as many notify services as you like). It can also
+add one task per bin to a to-do list — any `todo.*` entity, such as a Todoist
+project — named e.g. "Put out Food Waste (Brown caddy)" and due either on the
+day of the alert or on collection day. Leave the to-do list empty to get
+notifications only.
+
 Prefer to write it yourself? This is all it takes:
 
 ```yaml

@@ -39,7 +39,9 @@ def install_blueprint(hass) -> None:
     shutil.copy(BLUEPRINT, dest / BLUEPRINT.name)
 
 
-async def _setup(hass, aioclient_mock, page_fragment, mock_entry, services):
+async def _setup(
+    hass, aioclient_mock, page_fragment, mock_entry, services, extra_inputs=None
+):
     await hass.config.async_set_time_zone("Europe/London")
     aioclient_mock.post(RESULTS_URL, json={"status": "success", "data": page_fragment})
     mock_entry.add_to_hass(hass)
@@ -57,6 +59,7 @@ async def _setup(hass, aioclient_mock, page_fragment, mock_entry, services):
                         "bin_day_tomorrow": TOMORROW_SENSOR,
                         "notify_services": services,
                         "alert_time": "17:00:00",
+                        **(extra_inputs or {}),
                     },
                 }
             }
@@ -175,3 +178,69 @@ async def test_single_bin_day_sends_one_message(
     sent = [c for c in service_calls if c.domain == "notify"]
     assert len(sent) == 1
     assert sent[0].data["message"] == "Garden Waste (Brown lid bin) goes out tomorrow"
+
+
+TODO_LIST = "todo.hill_house"
+
+
+async def _fire_at_alert(hass, aioclient_mock, page_fragment, mock_entry, freezer, extra):
+    freezer.move_to("2026-08-11 16:59:50+01:00")
+    await _setup(
+        hass, aioclient_mock, page_fragment, mock_entry, ["persistent_notification"], extra
+    )
+
+
+@pytest.mark.parametrize(
+    ("todo_due", "expected_date"),
+    [(None, "2026-08-11"), ("alert_day", "2026-08-11"), ("collection_day", "2026-08-12")],
+)
+async def test_adds_one_todo_task_per_bin(
+    hass,
+    aioclient_mock,
+    page_fragment,
+    mock_entry,
+    freezer: FrozenDateTimeFactory,
+    service_calls,
+    todo_due,
+    expected_date,
+) -> None:
+    """With a to-do list set, each bin also becomes a dated task."""
+    extra = {"todo_list": TODO_LIST}
+    if todo_due:
+        extra["todo_due"] = todo_due
+    await _fire_at_alert(hass, aioclient_mock, page_fragment, mock_entry, freezer, extra)
+    service_calls.clear()
+
+    freezer.move_to("2026-08-11 17:00:01+01:00")
+    async_fire_time_changed(hass, dt_util.now())
+    await hass.async_block_till_done()
+
+    tasks = [c for c in service_calls if c.domain == "todo"]
+    assert {c.service for c in tasks} == {"add_item"}
+    assert sorted(c.data["item"] for c in tasks) == [
+        "Put out Cardboard & Paper (Blue lid bin)",
+        "Put out Food Waste (Brown caddy)",
+    ]
+    assert all(c.data["due_date"] == expected_date for c in tasks)
+    # Notifications still go out alongside the tasks.
+    assert len([c for c in service_calls if c.domain == "notify"]) == 2
+
+
+async def test_no_todo_tasks_without_a_list(
+    hass,
+    aioclient_mock,
+    page_fragment,
+    mock_entry,
+    freezer: FrozenDateTimeFactory,
+    service_calls,
+) -> None:
+    """Leaving the to-do list empty keeps the notification-only behaviour."""
+    await _fire_at_alert(hass, aioclient_mock, page_fragment, mock_entry, freezer, None)
+    service_calls.clear()
+
+    freezer.move_to("2026-08-11 17:00:01+01:00")
+    async_fire_time_changed(hass, dt_util.now())
+    await hass.async_block_till_done()
+
+    assert [c for c in service_calls if c.domain == "todo"] == []
+    assert len([c for c in service_calls if c.domain == "notify"]) == 2

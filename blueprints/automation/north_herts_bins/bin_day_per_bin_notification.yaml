@@ -6,6 +6,9 @@ blueprint:
 
     If two bins go out on the same day you get two messages, each naming its
     own bin and container. Notifications can go to several services at once.
+
+    Optionally, also add a task per bin to a to-do list (for example a Todoist
+    project), due either the evening of the alert or on collection day.
   domain: automation
   source_url: https://github.com/spiros-spiros/hitchin-bin-days/blob/main/blueprints/automation/north_herts_bins/bin_day_per_bin_notification.yaml
   input:
@@ -38,6 +41,27 @@ blueprint:
       default: "Bin day"
       selector:
         text:
+    todo_list:
+      name: To-do list (optional)
+      description: >-
+        A to-do list to add one task per bin to, such as a Todoist project.
+        Leave empty to only send notifications.
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain: todo
+    todo_due:
+      name: To-do task due
+      description: Which day the to-do task is due.
+      default: alert_day
+      selector:
+        select:
+          options:
+            - label: The day of the alert (evening before collection)
+              value: alert_day
+            - label: Collection day
+              value: collection_day
 
 mode: single
 
@@ -46,6 +70,11 @@ variables:
   notify_services: !input notify_services
   bins: "{{ state_attr(source, 'bins') | default([], true) }}"
   containers: "{{ state_attr(source, 'containers') | default([], true) }}"
+  todo_list: !input todo_list
+  todo_due: !input todo_due
+  todo_due_date: >-
+    {{ (now() + timedelta(days=1 if todo_due == 'collection_day' else 0))
+       .date().isoformat() }}
 
 triggers:
   - trigger: time
@@ -76,3 +105,14 @@ actions:
                   message: >-
                     {{ bin_name }}{% if bin_container %} ({{ bin_container }}){% endif %}
                     goes out tomorrow
+        - if:
+            - condition: template
+              value_template: "{{ todo_list | default('', true) | length > 0 }}"
+          then:
+            - action: todo.add_item
+              target:
+                entity_id: "{{ todo_list }}"
+              data:
+                item: >-
+                  Put out {{ bin_name }}{% if bin_container %} ({{ bin_container }}){% endif %}
+                due_date: "{{ todo_due_date }}"
